@@ -1,0 +1,48 @@
+:root {
+  color-scheme: light;
+  --bg: #fbfaf9;
+  --card: #fbf9f5;
+  --muted: #f5f2ed;
+  --border: #ebe7df;
+  --border-strong: #d6cbb6;
+  --text: #1c1a15;
+  --text-muted: #7e765d;
+  --text-faint: #534e42;
+  --accent: #1c1a15;
+  --yellow: #ffff63;
+  --yellow-deep: #cc903d;
+  --shadow: 0 1px 3px #1c1a1514, 0 1px 2px #1c1a150a;
+  --radius: 10px;
+  --font-sans: "Inter", "TWK Lausanne", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", "Serrif Condensed", ui-serif, Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 300;
+  letter-spacing: 0.24px;
+  line-height: 1.5;
+}
+
+input,
+button {
+  font-family: inherit;
+  color: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
