@@ -24,6 +24,17 @@
 // Exponential decay never lands on exactly $0, so the simulation runs until
 // the old provider's revenue falls below 1% of the original GMV. That month
 // is "fully migrated."
+//
+// Several token migrations share one plan mix, one annual growth rate, and
+// one average order value. Each token is simulated on its own, then summed
+// by calendar month. Before a token's migration date, all of its GMV stays
+// with its previous provider. The chart runs from the earliest migration
+// until the last token falls under 1% of its own GMV.
+//
+// An optional buyer-led campaign converts the slice token migration leaves
+// behind. Buyers are asked on the campaign date and respond over time.
+// Only buyers still active when asked can move, and they keep churning
+// while they decide. A success rate of 0% leaves the curves unchanged.
 
 const FULLY_MIGRATED_FRACTION = 0.01
 const MIN_HORIZON_MONTHS = 1
@@ -164,5 +175,231 @@ export function simulate({ gmv, migratablePct, aov, plans, growthPct = 0, migrat
     migratedSubscribers: aov > 0 ? Math.round(migratedGmv / aov) : 0,
     totalSubscribers: aov > 0 ? Math.round(gmv / aov) : 0,
     monthlyChurnRate,
+  }
+}
+
+function amount(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+/** Whole calendar months from `from` to `to`. */
+export function monthsBetween(from, to) {
+  const start = new Date(from)
+  const end = new Date(to)
+  return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
+}
+
+export function providerKey(migration, index) {
+  const name = String(migration?.previousProvider || '').trim()
+  if (name) return `name:${name.toLowerCase()}`
+  return `id:${migration?.id ?? index}`
+}
+
+export function providerSeriesLabel(migration, index) {
+  const name = String(migration?.previousProvider || '').trim()
+  return name || `Token migration ${index + 1}`
+}
+
+/**
+ * Fraction of the asked cohort that has moved by `monthsAfterAsk`.
+ * `monthsToComplete` is when about 90% of those who will ever move have done so.
+ * The curve is front-loaded: 1 - e^(-u/τ).
+ */
+export function buyerLedConversion(monthsAfterAsk, successPct, monthsToComplete) {
+  const elapsed = Number(monthsAfterAsk)
+  const success = Math.min(1, Math.max(0, amount(successPct) / 100))
+  const months = amount(monthsToComplete)
+  if (elapsed <= 0 || success === 0 || months <= 0) return 0
+  const tau = months / -Math.log(0.1)
+  return success * (1 - Math.exp(-elapsed / tau))
+}
+
+function retainedOldAt(elapsed, book, offset, askOffset, successPct, monthsToComplete, plans) {
+  const base = oldRevenueAt(elapsed, book.gmv, book.migratablePct, plans)
+  const sinceAsk = offset + elapsed - askOffset
+  if (sinceAsk <= 0) return base
+  return base * (1 - buyerLedConversion(sinceAsk, successPct, monthsToComplete))
+}
+
+function horizonWithBuyerLed(book, offset, askOffset, successPct, monthsToComplete, plans) {
+  const limit = FULLY_MIGRATED_FRACTION * book.gmv
+  if (book.gmv <= 0 || oldRevenueAt(0, book.gmv, book.migratablePct, plans) <= limit) {
+    return MIN_HORIZON_MONTHS
+  }
+  for (let elapsed = 1; elapsed <= MAX_HORIZON_MONTHS; elapsed++) {
+    if (retainedOldAt(elapsed, book, offset, askOffset, successPct, monthsToComplete, plans) <= limit) {
+      return elapsed
+    }
+  }
+  return MAX_HORIZON_MONTHS
+}
+
+/**
+ * Sum independent token migrations that share plans, growth, and AOV.
+ * Each token contributes its full GMV to its previous provider until its
+ * own migration date, then follows the single-book model. Buyer-led
+ * migration, when present, peels the retained slice off over time.
+ */
+export function simulatePortfolio({ aov = 0, plans, growthPct = 0, migrations, buyerLed = null }) {
+  const source = Array.isArray(migrations) && migrations.length > 0
+    ? migrations
+    : [{ id: 1, previousProvider: '', gmv: 0, migratablePct: 0, migrationDate: new Date() }]
+
+  const books = source.map((migration, index) => {
+    const gmv = Math.max(0, amount(migration.gmv))
+    const migratablePct = amount(migration.migratablePct)
+    const parsed = new Date(migration.migrationDate)
+    const migrationDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed
+    return {
+      previousProvider: migration.previousProvider,
+      index,
+      gmv,
+      migratablePct,
+      migrationDate,
+      key: providerKey(migration, index),
+      label: providerSeriesLabel(migration, index),
+    }
+  })
+
+  const startDate = books.reduce(
+    (earliest, book) => (book.migrationDate < earliest ? book.migrationDate : earliest),
+    books[0].migrationDate,
+  )
+  const latestDate = books.reduce(
+    (latest, book) => (book.migrationDate > latest ? book.migrationDate : latest),
+    books[0].migrationDate,
+  )
+
+  const campaignDate = buyerLed
+    ? new Date(buyerLed.migrationDate || latestDate)
+    : null
+  const safeCampaign = campaignDate && !Number.isNaN(campaignDate.getTime()) ? campaignDate : latestDate
+  const successPct = buyerLed ? amount(buyerLed.successPct) : 0
+  const monthsToComplete = buyerLed ? amount(buyerLed.months) : 0
+  const campaignOffset = buyerLed ? monthsBetween(startDate, safeCampaign) : 0
+
+  const scheduled = books.map((book) => {
+    const offset = Math.max(0, monthsBetween(startDate, book.migrationDate))
+    const askOffset = buyerLed ? Math.max(campaignOffset, offset) : offset
+    return {
+      ...book,
+      offset,
+      askOffset,
+      horizonMonths: buyerLed
+        ? horizonWithBuyerLed(book, offset, askOffset, successPct, monthsToComplete, plans)
+        : computeHorizonMonths(book.gmv, book.migratablePct, plans),
+    }
+  })
+
+  const lastMonth = scheduled.reduce(
+    (max, book) => Math.max(max, book.offset + book.horizonMonths),
+    0,
+  )
+
+  const providers = []
+  const seen = new Set()
+  scheduled.forEach((book) => {
+    if (seen.has(book.key)) return
+    seen.add(book.key)
+    providers.push({ key: book.key, label: book.label })
+  })
+
+  const points = []
+  for (let t = 0; t <= lastMonth; t++) {
+    let old = 0
+    let paddle = 0
+    const byProvider = {}
+    providers.forEach((provider) => {
+      byProvider[provider.key] = 0
+    })
+
+    scheduled.forEach((book) => {
+      const elapsed = t - book.offset
+      const bookOld = elapsed < 0
+        ? book.gmv
+        : retainedOldAt(elapsed, book, book.offset, book.askOffset, successPct, monthsToComplete, plans)
+      const bookPaddle = elapsed < 0
+        ? 0
+        : Math.max(0, book.gmv - bookOld + growthExtraAt(elapsed, book.gmv, plans, growthPct))
+      old += bookOld
+      paddle += bookPaddle
+      byProvider[book.key] += bookOld
+    })
+
+    points.push({
+      month: t,
+      date: addMonths(startDate, t),
+      old,
+      paddle,
+      byProvider,
+    })
+  }
+
+  const gmv = scheduled.reduce((sum, book) => sum + book.gmv, 0)
+  const migratedGmv = scheduled.reduce((sum, book) => {
+    const share = Math.min(1, Math.max(0, book.migratablePct / 100))
+    return sum + share * book.gmv
+  }, 0)
+  const segments = normalizedPlans(plans)
+  const monthlyChurnRate = segments.reduce(
+    (sum, plan) => sum + plan.share / plan.lifespanMonths,
+    0,
+  )
+  const contributing = scheduled.filter((book) => book.gmv > 0)
+  const labelSource = contributing.length > 0 ? contributing : [scheduled[0]]
+  const names = labelSource.map((book) => String(book.previousProvider || '').trim())
+  const uniqueNames = [...new Set(names.filter(Boolean).map((name) => name.toLowerCase()))]
+  const sharedName = uniqueNames.length === 1 && names.every(Boolean) ? names.find(Boolean) : ''
+
+  const marks = []
+  labelSource.forEach((book) => {
+    const time = addMonths(startDate, book.offset).getTime()
+    const existing = marks.find((mark) => mark.time === time)
+    if (existing) {
+      if (!existing.labels.includes(book.label)) existing.labels.push(book.label)
+      return
+    }
+    marks.push({ time, labels: [book.label] })
+  })
+
+  let buyerLedPool = 0
+  if (buyerLed) {
+    scheduled.forEach((book) => {
+      const elapsedAtAsk = book.askOffset - book.offset
+      buyerLedPool += oldRevenueAt(elapsedAtAsk, book.gmv, book.migratablePct, plans)
+    })
+    const campaignTime = addMonths(startDate, Math.max(0, campaignOffset)).getTime()
+    const existing = marks.find((mark) => mark.time === campaignTime)
+    if (existing) existing.labels.push('Buyer-led')
+    else marks.push({ time: campaignTime, labels: ['Buyer-led'] })
+  }
+
+  return {
+    points,
+    providers,
+    marks: marks.map((mark) => {
+      const names = mark.labels.filter((label) => label !== 'Buyer-led')
+      const tokenLabel = names.length === 0
+        ? ''
+        : (labelSource.length === 1 ? 'Migration' : names.join(', '))
+      const label = [tokenLabel, mark.labels.includes('Buyer-led') ? 'Buyer-led' : ''].filter(Boolean).join(', ')
+      return { time: mark.time, label }
+    }),
+    horizonMonths: lastMonth,
+    migrationDate: startDate,
+    fullyMigratedDate: addMonths(startDate, lastMonth),
+    gmv,
+    migratedGmv,
+    retainedOldGmv: gmv - migratedGmv,
+    migratedSubscribers: aov > 0 ? Math.round(migratedGmv / aov) : 0,
+    totalSubscribers: aov > 0 ? Math.round(gmv / aov) : 0,
+    monthlyChurnRate,
+    providerLabel: labelSource.length <= 1 ? (names[0] || 'Previous provider') : (sharedName || 'Previous providers'),
+    stayLabel: labelSource.length <= 1 ? (names[0] || 'old provider') : (sharedName || 'previous providers'),
+    buyerLedEnabled: Boolean(buyerLed),
+    buyerLedPool,
+    buyerLedTarget: buyerLedPool * Math.min(1, Math.max(0, successPct / 100)),
+    buyerLedDate: buyerLed ? addMonths(startDate, Math.max(0, campaignOffset)) : null,
   }
 }

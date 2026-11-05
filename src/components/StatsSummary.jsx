@@ -1,6 +1,6 @@
 import { formatCurrency, formatDate, formatNumber, formatPercent } from '../utils/format'
 
-export default function StatsSummary({ result, providerName, currency }) {
+export default function StatsSummary({ result, currency }) {
   const {
     migratedGmv,
     retainedOldGmv,
@@ -9,12 +9,18 @@ export default function StatsSummary({ result, providerName, currency }) {
     monthlyChurnRate,
     fullyMigratedDate,
     horizonMonths,
+    stayLabel,
+    buyerLedEnabled,
+    buyerLedTarget,
   } = result
 
-  const providerLabel = providerName?.trim() || 'old provider'
   const stats = [
-    { label: 'Migrated on day 0', value: formatCurrency(migratedGmv, { currency }) },
-    { label: `Stays with ${providerLabel}`, value: formatCurrency(retainedOldGmv, { currency }) },
+    { label: 'Moves to Paddle', value: formatCurrency(migratedGmv, { currency }) },
+    { label: `Stays with ${stayLabel || 'old provider'}`, value: formatCurrency(retainedOldGmv, { currency }) },
+    ...(buyerLedEnabled ? [{
+      label: 'Buyer-led target',
+      value: formatCurrency(buyerLedTarget, { currency }),
+    }] : []),
     {
       label: 'Subscribers migrated',
       value: `${formatNumber(migratedSubscribers)} / ${formatNumber(totalSubscribers)}`,

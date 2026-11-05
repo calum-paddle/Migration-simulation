@@ -2,38 +2,40 @@ import { useMemo, useState } from 'react'
 import InputsPanel from './components/InputsPanel'
 import StatsSummary from './components/StatsSummary'
 import RevenueChart from './components/RevenueChart'
-import { simulate } from './simulation'
+import { simulatePortfolio } from './simulation'
 import './App.css'
 
 const DEFAULT_INPUTS = {
-  previousProvider: '',
+  sellerName: '',
   currency: 'USD',
-  gmv: 500000,
-  migratablePct: 70,
   growthPct: 0,
   aov: 50,
-  migrationDate: new Date(),
   plans: [{ id: 1, period: 'monthly', customLabel: '', sharePct: 100, lifespanMonths: 24 }],
+  migrations: [
+    {
+      id: 1,
+      previousProvider: '',
+      gmv: 500000,
+      migratablePct: 70,
+      migrationDate: new Date(),
+    },
+  ],
+  buyerLed: null,
 }
 
 export default function App() {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS)
 
-  const result = useMemo(() => {
-    const gmv = Number(inputs.gmv) || 0
-    const aov = Number(inputs.aov) || 0
-    const migratablePct = Number(inputs.migratablePct) || 0
-    const growthPct = Number(inputs.growthPct) || 0
-
-    return simulate({
-      gmv,
-      migratablePct,
-      aov,
+  const result = useMemo(
+    () => simulatePortfolio({
+      aov: inputs.aov,
       plans: inputs.plans,
-      growthPct,
-      migrationDate: inputs.migrationDate,
-    })
-  }, [inputs])
+      growthPct: inputs.growthPct,
+      migrations: inputs.migrations,
+      buyerLed: inputs.buyerLed,
+    }),
+    [inputs],
+  )
 
   return (
     <>
@@ -52,18 +54,18 @@ export default function App() {
 
         <main className="app-grid">
           <div className="app-sidebar">
-            <InputsPanel inputs={inputs} onChange={setInputs} />
-            <StatsSummary
-              result={result}
-              providerName={inputs.previousProvider}
-              currency={inputs.currency}
+            <InputsPanel
+              inputs={inputs}
+              onChange={setInputs}
+              buyerLedPool={result.buyerLedPool}
             />
+            <StatsSummary result={result} currency={inputs.currency} />
           </div>
           <div className="app-main">
             <RevenueChart
               result={result}
-              providerName={inputs.previousProvider}
               currency={inputs.currency}
+              title={inputs.sellerName}
             />
           </div>
         </main>
