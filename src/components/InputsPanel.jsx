@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatCompactCurrency, formatCurrency, formatDate } from '../utils/format'
+import { formatCompactCurrency, formatCurrency, formatDate, formatNumber } from '../utils/format'
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$' },
@@ -183,48 +183,50 @@ function PlanCard({ plan, plans, gmv, currency, open, onToggle, updatePlan, upda
             />
           )}
 
-          <label className="field">
-            <span className="field-label">
-              Share of GMV
-              <strong className="field-value">
-                {' '}
-                {sharePct}% ({formatCurrency((gmv * sharePct) / 100, { currency })})
-              </strong>
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={sharePct}
-              disabled={locked}
-              onChange={(event) => updatePlans(rebalanceShares(plans, plan.id, event.target.value))}
-              className="slider"
-              aria-label="Share of GMV"
-            />
-            <div className="slider-ticks">
-              <span>0%</span>
-              <span>50%</span>
-              <span>100%</span>
-            </div>
-          </label>
-
-          <label className="field">
-            <span className="field-label">Average lifespan</span>
-            <div className="input-with-suffix">
+          <div className="input-group">
+            <label className="field">
+              <span className="field-label">
+                Share of GMV
+                <strong className="field-value">
+                  {' '}
+                  {sharePct}% ({formatCurrency((gmv * sharePct) / 100, { currency })})
+                </strong>
+              </span>
               <input
-                type="number"
-                min="1"
+                type="range"
+                min="0"
+                max="100"
                 step="1"
-                value={plan.lifespanMonths}
-                onChange={(event) => updatePlan(plan.id, {
-                  lifespanMonths: event.target.value === '' ? '' : Number(event.target.value),
-                })}
-                aria-label="Average lifespan"
+                value={sharePct}
+                disabled={locked}
+                onChange={(event) => updatePlans(rebalanceShares(plans, plan.id, event.target.value))}
+                className="slider"
+                aria-label="Share of GMV"
               />
-              <span className="suffix">months</span>
-            </div>
-          </label>
+              <div className="slider-ticks">
+                <span>0%</span>
+                <span>50%</span>
+                <span>100%</span>
+              </div>
+            </label>
+
+            <label className="field">
+              <span className="field-label">Average Customer Lifespan</span>
+              <div className="input-with-suffix">
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={plan.lifespanMonths}
+                  onChange={(event) => updatePlan(plan.id, {
+                    lifespanMonths: event.target.value === '' ? '' : Number(event.target.value),
+                  })}
+                  aria-label="Average Customer Lifespan"
+                />
+                <span className="suffix">months</span>
+              </div>
+            </label>
+          </div>
           </div>
         </div>
       </div>
@@ -233,10 +235,10 @@ function PlanCard({ plan, plans, gmv, currency, open, onToggle, updatePlan, upda
 }
 
 export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
-  const { sellerName, currency, growthPct, aov, plans, migrations, buyerLed } = inputs
+  const { sellerName, currency, gmv, growthPct, subscriptions, plans, migrations, buyerLed } = inputs
   const [openSection, setOpenSection] = useState(null)
   const [openPlanId, setOpenPlanId] = useState(null)
-  const totalGmv = migrations.reduce((sum, migration) => sum + (Number(migration.gmv) || 0), 0)
+  const totalGmv = Number(gmv) || 0
 
   const setCurrency = (next) => onChange({ ...inputs, currency: next })
   const updatePlans = (nextPlans) => onChange({ ...inputs, plans: nextPlans })
@@ -265,7 +267,7 @@ export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
         {
           id,
           previousProvider: '',
-          gmv: 0,
+          sharePct: 0,
           migratablePct: 70,
           migrationDate: new Date(),
         },
@@ -285,8 +287,9 @@ export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
 
   const generalSummary = [
     sellerName?.trim() || 'General',
+    formatCompactCurrency(totalGmv, currency),
+    formatNumber(Number(subscriptions) || 0),
     `${Math.round(Number(growthPct) || 0)}% / year`,
-    formatCurrency(Number(aov) || 0, { currency }),
   ].join(' · ')
 
   return (
@@ -309,46 +312,50 @@ export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
           />
         </label>
 
-        <label className="field">
-          <span className="field-label">
-            Annual Growth Goal
-            <strong className="field-value"> {Math.round(Number(growthPct) || 0)}% / year</strong>
-          </span>
-          <input
-            type="range"
-            min="0"
-            max="300"
-            step="1"
-            value={growthPct}
-            onChange={(event) => onChange({ ...inputs, growthPct: Number(event.target.value) })}
-            className="slider"
-            aria-label="Annual Growth Goal"
-          />
-          <div className="slider-ticks">
-            <span>0%</span>
-            <span>150%</span>
-            <span>300%</span>
-          </div>
-        </label>
+        <div className="input-group">
+          <label className="field">
+            <span className="field-label">Total monthly GMV</span>
+            <div className="input-with-prefix">
+              <CurrencySelect value={currency} onChange={setCurrency} />
+              <input
+                type="number"
+                min="0"
+                step="1000"
+                value={gmv}
+                onChange={(event) => onChange({
+                  ...inputs,
+                  gmv: event.target.value === '' ? '' : Number(event.target.value),
+                })}
+                aria-label="Total monthly GMV"
+              />
+            </div>
+          </label>
 
-        <label className="field">
-          <span className="field-label">Average order value</span>
-          <div className="input-with-prefix">
-            <CurrencySelect value={currency} onChange={setCurrency} />
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={aov}
-              onChange={(event) => onChange({
-                ...inputs,
-                aov: event.target.value === '' ? '' : Number(event.target.value),
-              })}
-            />
-          </div>
-        </label>
+          <label className="field">
+            <span className="field-label">Number of subscriptions</span>
+            <div className="input-with-suffix">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={subscriptions}
+                onChange={(event) => onChange({
+                  ...inputs,
+                  subscriptions: event.target.value === '' ? '' : Number(event.target.value),
+                })}
+                aria-label="Number of subscriptions"
+              />
+              <span className="suffix">
+                {Number(subscriptions) > 0
+                  ? `AOV: ${formatCurrency(Math.round(totalGmv / Number(subscriptions)), { currency })}`
+                  : 'AOV: —'}
+              </span>
+            </div>
+          </label>
+        </div>
 
-        <div className="field">
+        <div className="input-group">
+          <div className="field">
           <span className="field-label">Plans</span>
           <div className="plan-list">
             {plans.map((plan) => (
@@ -376,14 +383,42 @@ export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
           >
             Add plan
           </button>
+          </div>
+        </div>
+
+        <div className="input-group">
+          <label className="field">
+          <span className="field-label">
+            Annual Growth Goal
+            <strong className="field-value"> {Math.round(Number(growthPct) || 0)}% / year</strong>
+          </span>
+          <input
+            type="range"
+            min="0"
+            max="300"
+            step="1"
+            value={growthPct}
+            onChange={(event) => onChange({ ...inputs, growthPct: Number(event.target.value) })}
+            className="slider"
+            aria-label="Annual Growth Goal"
+          />
+          <div className="slider-ticks">
+            <span>0%</span>
+            <span>150%</span>
+            <span>300%</span>
+          </div>
+          </label>
         </div>
       </Fold>
 
       {migrations.map((migration, index) => {
         const name = migration.previousProvider?.trim() || `Token migration ${index + 1}`
+        const sharePct = Number(migration.sharePct) || 0
+        const tokenGmv = totalGmv * sharePct / 100
         const summary = [
           name,
-          formatCompactCurrency(Number(migration.gmv) || 0, currency),
+          `${Math.round(sharePct)}%`,
+          formatCompactCurrency(tokenGmv, currency),
           `${Math.round(Number(migration.migratablePct) || 0)}%`,
           formatDate(migration.migrationDate),
         ].join(' · ')
@@ -406,59 +441,72 @@ export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
               />
             </label>
 
-            <label className="field">
-              <span className="field-label">Total monthly GMV (subscriptions)</span>
-              <div className="input-with-prefix">
-                <CurrencySelect value={currency} onChange={setCurrency} />
+            <div className="input-group">
+              <label className="field">
+                <span className="field-label">
+                  Share of total GMV
+                  <strong className="field-value">
+                    {' '}
+                    {sharePct}% ({formatCurrency(tokenGmv, { currency })})
+                  </strong>
+                </span>
                 <input
-                  type="number"
+                  type="range"
                   min="0"
-                  step="1000"
-                  value={migration.gmv}
+                  max="100"
+                  step="1"
+                  value={sharePct}
+                  onChange={(event) => updateMigration(migration.id, { sharePct: Number(event.target.value) })}
+                  className="slider"
+                  aria-label="Share of total GMV"
+                />
+                <div className="slider-ticks">
+                  <span>0%</span>
+                  <span>50%</span>
+                  <span>100%</span>
+                </div>
+              </label>
+
+              <label className="field">
+                <span className="field-label">
+                  Migratable volume
+                  <strong className="field-value">
+                    {' '}
+                    {migration.migratablePct}% ({formatCurrency(
+                      (tokenGmv * (Number(migration.migratablePct) || 0)) / 100,
+                      { currency },
+                    )})
+                  </strong>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={migration.migratablePct}
+                  onChange={(event) => updateMigration(migration.id, { migratablePct: Number(event.target.value) })}
+                  className="slider"
+                />
+                <div className="slider-ticks">
+                  <span>0%</span>
+                  <span>50%</span>
+                  <span>100%</span>
+                </div>
+              </label>
+            </div>
+
+            <div className="input-group">
+              <label className="field">
+                <span className="field-label">Migration date</span>
+                <input
+                  type="date"
+                  value={toDateInputValue(migration.migrationDate)}
                   onChange={(event) => updateMigration(migration.id, {
-                    gmv: event.target.value === '' ? '' : Number(event.target.value),
+                    migrationDate: new Date(`${event.target.value}T00:00:00`),
                   })}
                 />
-              </div>
-            </label>
-
-            <label className="field">
-              <span className="field-label">
-                Migratable volume
-                <strong className="field-value">
-                  {' '}
-                  {migration.migratablePct}% ({formatCurrency(
-                    ((Number(migration.gmv) || 0) * (Number(migration.migratablePct) || 0)) / 100,
-                    { currency },
-                  )})
-                </strong>
-              </span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value={migration.migratablePct}
-                onChange={(event) => updateMigration(migration.id, { migratablePct: Number(event.target.value) })}
-                className="slider"
-              />
-              <div className="slider-ticks">
-                <span>0%</span>
-                <span>50%</span>
-                <span>100%</span>
-              </div>
-            </label>
-
-            <label className="field">
-              <span className="field-label">Migration date</span>
-              <input
-                type="date"
-                value={toDateInputValue(migration.migrationDate)}
-                onChange={(event) => updateMigration(migration.id, {
-                  migrationDate: new Date(`${event.target.value}T00:00:00`),
-                })}
-              />
-            </label>
+              </label>
+            </div>
           </Fold>
         )
       })}
@@ -483,66 +531,70 @@ export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
             <strong className="field-value"> {formatCurrency(buyerLedPool, { currency })}</strong>
           </p>
 
-          <label className="field">
-            <span className="field-label">Migration date</span>
-            <input
-              type="date"
-              value={toDateInputValue(buyerLed.migrationDate || latestMigrationDate(migrations))}
-              onChange={(event) => onChange({
-                ...inputs,
-                buyerLed: {
-                  ...buyerLed,
-                  migrationDate: new Date(`${event.target.value}T00:00:00`),
-                },
-              })}
-            />
-          </label>
-
-          <label className="field">
-            <span className="field-label">
-              Success rate
-              <strong className="field-value"> {Math.round(Number(buyerLed.successPct) || 0)}%</strong>
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={buyerLed.successPct}
-              onChange={(event) => onChange({
-                ...inputs,
-                buyerLed: { ...buyerLed, successPct: Number(event.target.value) },
-              })}
-              className="slider"
-              aria-label="Buyer-led success rate"
-            />
-            <div className="slider-ticks">
-              <span>0%</span>
-              <span>50%</span>
-              <span>100%</span>
-            </div>
-          </label>
-
-          <label className="field">
-            <span className="field-label">Months to complete</span>
-            <div className="input-with-suffix">
+          <div className="input-group">
+            <label className="field">
+              <span className="field-label">
+                Success rate
+                <strong className="field-value"> {Math.round(Number(buyerLed.successPct) || 0)}%</strong>
+              </span>
               <input
-                type="number"
-                min="1"
+                type="range"
+                min="0"
+                max="100"
                 step="1"
-                value={buyerLed.months}
+                value={buyerLed.successPct}
+                onChange={(event) => onChange({
+                  ...inputs,
+                  buyerLed: { ...buyerLed, successPct: Number(event.target.value) },
+                })}
+                className="slider"
+                aria-label="Buyer-led success rate"
+              />
+              <div className="slider-ticks">
+                <span>0%</span>
+                <span>50%</span>
+                <span>100%</span>
+              </div>
+            </label>
+
+            <label className="field">
+              <span className="field-label">Months to complete</span>
+              <div className="input-with-suffix">
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={buyerLed.months}
+                  onChange={(event) => onChange({
+                    ...inputs,
+                    buyerLed: {
+                      ...buyerLed,
+                      months: event.target.value === '' ? '' : Number(event.target.value),
+                    },
+                  })}
+                  aria-label="Months to complete"
+                />
+                <span className="suffix">months</span>
+              </div>
+            </label>
+          </div>
+
+          <div className="input-group">
+            <label className="field">
+              <span className="field-label">Migration date</span>
+              <input
+                type="date"
+                value={toDateInputValue(buyerLed.migrationDate || latestMigrationDate(migrations))}
                 onChange={(event) => onChange({
                   ...inputs,
                   buyerLed: {
                     ...buyerLed,
-                    months: event.target.value === '' ? '' : Number(event.target.value),
+                    migrationDate: new Date(`${event.target.value}T00:00:00`),
                   },
                 })}
-                aria-label="Months to complete"
               />
-              <span className="suffix">months</span>
-            </div>
-          </label>
+            </label>
+          </div>
         </Fold>
       ) : (
         <button

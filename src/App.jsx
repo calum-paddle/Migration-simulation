@@ -8,14 +8,15 @@ import './App.css'
 const DEFAULT_INPUTS = {
   sellerName: '',
   currency: 'USD',
+  gmv: 500000,
   growthPct: 0,
-  aov: 50,
+  subscriptions: 10000,
   plans: [{ id: 1, period: 'monthly', customLabel: '', sharePct: 100, lifespanMonths: 24 }],
   migrations: [
     {
       id: 1,
       previousProvider: '',
-      gmv: 500000,
+      sharePct: 100,
       migratablePct: 70,
       migrationDate: new Date(),
     },
@@ -28,7 +29,8 @@ export default function App() {
 
   const result = useMemo(
     () => simulatePortfolio({
-      aov: inputs.aov,
+      gmv: inputs.gmv,
+      subscriptions: inputs.subscriptions,
       plans: inputs.plans,
       growthPct: inputs.growthPct,
       migrations: inputs.migrations,

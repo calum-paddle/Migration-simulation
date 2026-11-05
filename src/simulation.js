@@ -25,16 +25,17 @@
 // the old provider's revenue falls below 1% of the original GMV. That month
 // is "fully migrated."
 //
-// Several token migrations share one plan mix, one annual growth rate, and
-// one average order value. Each token is simulated on its own, then summed
-// by calendar month. Before a token's migration date, all of its GMV stays
-// with its previous provider. The chart runs from the earliest migration
-// until the last token falls under 1% of its own GMV.
+// Total monthly GMV is one number. Each token takes a share of it, and
+// shares do not have to add up to 100%. On that token's date, its
+// migratable share moves to Paddle. The rest of its share stays with that
+// provider and decays. GMV no token claims stays with previous providers.
+// The chart runs from the earliest migration until the last token falls
+// under 1% of its own share.
 //
-// An optional buyer-led campaign converts the slice token migration leaves
-// behind. Buyers are asked on the campaign date and respond over time.
-// Only buyers still active when asked can move, and they keep churning
-// while they decide. A success rate of 0% leaves the curves unchanged.
+// Buyer-led migration is the GMV no token actually takes: the unallocated
+// remainder plus the non-migratable part of every share. Buyers are asked
+// on the campaign date and respond over time, still churning while they
+// decide. A success rate of 0% leaves the curves unchanged.
 
 const FULLY_MIGRATED_FRACTION = 0.01
 const MIN_HORIZON_MONTHS = 1
@@ -134,12 +135,12 @@ export function addMonths(date, months) {
  * @param {Object} params
  * @param {number} params.gmv - Total monthly subscription GMV before migration.
  * @param {number} params.migratablePct - 0-100, % of GMV migrated instantly.
- * @param {number} params.aov - Average order value (used for subscriber counts).
+ * @param {number} params.subscriptions - Total subscriptions across the book. Migrated subscribers follow the migratable share of GMV.
  * @param {Array} params.plans - Plan slices of GMV, each with sharePct and lifespanMonths.
  * @param {number} params.growthPct - Annual % growth of new traffic above replacement. Paddle only.
  * @param {Date|string} params.migrationDate - Date the migration takes effect.
  */
-export function simulate({ gmv, migratablePct, aov, plans, growthPct = 0, migrationDate }) {
+export function simulate({ gmv, migratablePct, subscriptions = 0, plans, growthPct = 0, migrationDate }) {
   const m = Math.min(1, Math.max(0, migratablePct / 100))
   const horizonMonths = computeHorizonMonths(gmv, migratablePct, plans)
   const startDate = new Date(migrationDate)
@@ -172,10 +173,16 @@ export function simulate({ gmv, migratablePct, aov, plans, growthPct = 0, migrat
     gmv,
     migratedGmv,
     retainedOldGmv,
-    migratedSubscribers: aov > 0 ? Math.round(migratedGmv / aov) : 0,
-    totalSubscribers: aov > 0 ? Math.round(gmv / aov) : 0,
+    migratedSubscribers: subscriberCount(subscriptions, gmv, migratedGmv),
+    totalSubscribers: Math.max(0, Math.round(amount(subscriptions))),
     monthlyChurnRate,
   }
+}
+
+function subscriberCount(subscriptions, gmv, sliceGmv) {
+  const total = Math.max(0, Math.round(amount(subscriptions)))
+  if (total === 0 || gmv <= 0) return 0
+  return Math.round(total * (sliceGmv / gmv))
 }
 
 function amount(value) {
@@ -222,6 +229,13 @@ function retainedOldAt(elapsed, book, offset, askOffset, successPct, monthsToCom
   return base * (1 - buyerLedConversion(sinceAsk, successPct, monthsToComplete))
 }
 
+function unallocatedRemaining(monthsAfterAsk, unallocated, plans, successPct, monthsToComplete) {
+  if (unallocated <= 0) return 0
+  if (monthsAfterAsk < 0) return unallocated
+  const base = oldRevenueAt(monthsAfterAsk, unallocated, 0, plans)
+  return base * (1 - buyerLedConversion(monthsAfterAsk, successPct, monthsToComplete))
+}
+
 function horizonWithBuyerLed(book, offset, askOffset, successPct, monthsToComplete, plans) {
   const limit = FULLY_MIGRATED_FRACTION * book.gmv
   if (book.gmv <= 0 || oldRevenueAt(0, book.gmv, book.migratablePct, plans) <= limit) {
@@ -236,24 +250,28 @@ function horizonWithBuyerLed(book, offset, askOffset, successPct, monthsToComple
 }
 
 /**
- * Sum independent token migrations that share plans, growth, and AOV.
- * Each token contributes its full GMV to its previous provider until its
- * own migration date, then follows the single-book model. Buyer-led
- * migration, when present, peels the retained slice off over time.
+ * One total GMV, split by each token's share. A token claims
+ * share × migratable of that total on its migration date. Whatever no
+ * token claims, including the non-migratable slice of each share, is the
+ * buyer-led pool. That remainder stays with previous providers until the
+ * campaign, which peels it off with the same front-loaded curve.
  */
-export function simulatePortfolio({ aov = 0, plans, growthPct = 0, migrations, buyerLed = null }) {
+export function simulatePortfolio({ gmv: totalInput = 0, subscriptions = 0, plans, growthPct = 0, migrations, buyerLed = null }) {
+  const totalGmv = Math.max(0, amount(totalInput))
   const source = Array.isArray(migrations) && migrations.length > 0
     ? migrations
-    : [{ id: 1, previousProvider: '', gmv: 0, migratablePct: 0, migrationDate: new Date() }]
+    : [{ id: 1, previousProvider: '', sharePct: 0, migratablePct: 0, migrationDate: new Date() }]
 
   const books = source.map((migration, index) => {
-    const gmv = Math.max(0, amount(migration.gmv))
+    const sharePct = Math.min(100, Math.max(0, amount(migration.sharePct)))
+    const gmv = totalGmv * sharePct / 100
     const migratablePct = amount(migration.migratablePct)
     const parsed = new Date(migration.migrationDate)
     const migrationDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed
     return {
       previousProvider: migration.previousProvider,
       index,
+      sharePct,
       gmv,
       migratablePct,
       migrationDate,
@@ -292,10 +310,24 @@ export function simulatePortfolio({ aov = 0, plans, growthPct = 0, migrations, b
     }
   })
 
-  const lastMonth = scheduled.reduce(
+  const claimedGmv = scheduled.reduce((sum, book) => sum + book.gmv, 0)
+  const unallocated = Math.max(0, totalGmv - claimedGmv)
+
+  let lastMonth = scheduled.reduce(
     (max, book) => Math.max(max, book.offset + book.horizonMonths),
     0,
   )
+  if (buyerLed && unallocated > 0) {
+    const limit = FULLY_MIGRATED_FRACTION * totalGmv
+    const campaignStart = Math.max(0, campaignOffset)
+    for (let elapsed = 0; elapsed <= MAX_HORIZON_MONTHS; elapsed++) {
+      const remaining = unallocatedRemaining(elapsed, unallocated, plans, successPct, monthsToComplete)
+      if (remaining <= limit) {
+        lastMonth = Math.max(lastMonth, Math.min(MAX_HORIZON_MONTHS, campaignStart + elapsed))
+        break
+      }
+    }
+  }
 
   const providers = []
   const seen = new Set()
@@ -327,6 +359,12 @@ export function simulatePortfolio({ aov = 0, plans, growthPct = 0, migrations, b
       byProvider[book.key] += bookOld
     })
 
+    const unallocatedOld = buyerLed
+      ? unallocatedRemaining(t - campaignOffset, unallocated, plans, successPct, monthsToComplete)
+      : unallocated
+    old += unallocatedOld
+    paddle += unallocated - unallocatedOld
+
     points.push({
       month: t,
       date: addMonths(startDate, t),
@@ -336,7 +374,7 @@ export function simulatePortfolio({ aov = 0, plans, growthPct = 0, migrations, b
     })
   }
 
-  const gmv = scheduled.reduce((sum, book) => sum + book.gmv, 0)
+  const gmv = totalGmv
   const migratedGmv = scheduled.reduce((sum, book) => {
     const share = Math.min(1, Math.max(0, book.migratablePct / 100))
     return sum + share * book.gmv
@@ -365,10 +403,7 @@ export function simulatePortfolio({ aov = 0, plans, growthPct = 0, migrations, b
 
   let buyerLedPool = 0
   if (buyerLed) {
-    scheduled.forEach((book) => {
-      const elapsedAtAsk = book.askOffset - book.offset
-      buyerLedPool += oldRevenueAt(elapsedAtAsk, book.gmv, book.migratablePct, plans)
-    })
+    buyerLedPool = Math.max(0, totalGmv - migratedGmv)
     const campaignTime = addMonths(startDate, Math.max(0, campaignOffset)).getTime()
     const existing = marks.find((mark) => mark.time === campaignTime)
     if (existing) existing.labels.push('Buyer-led')
@@ -392,8 +427,8 @@ export function simulatePortfolio({ aov = 0, plans, growthPct = 0, migrations, b
     gmv,
     migratedGmv,
     retainedOldGmv: gmv - migratedGmv,
-    migratedSubscribers: aov > 0 ? Math.round(migratedGmv / aov) : 0,
-    totalSubscribers: aov > 0 ? Math.round(gmv / aov) : 0,
+    migratedSubscribers: subscriberCount(subscriptions, gmv, migratedGmv),
+    totalSubscribers: Math.max(0, Math.round(amount(subscriptions))),
     monthlyChurnRate,
     providerLabel: labelSource.length <= 1 ? (names[0] || 'Previous provider') : (sharedName || 'Previous providers'),
     stayLabel: labelSource.length <= 1 ? (names[0] || 'old provider') : (sharedName || 'previous providers'),

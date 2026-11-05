@@ -4,13 +4,15 @@ function currencyCode(currency) {
   return CURRENCIES.includes(currency) ? currency : 'USD'
 }
 
-export function formatCurrency(value, { maximumFractionDigits = 0, currency = 'USD' } = {}) {
+export function formatCurrency(value, { maximumFractionDigits = 0, minimumFractionDigits, currency = 'USD' } = {}) {
   const amount = Number.isFinite(value) ? value : 0
-  return new Intl.NumberFormat('en-US', {
+  const options = {
     style: 'currency',
     currency: currencyCode(currency),
     maximumFractionDigits,
-  }).format(amount)
+  }
+  if (minimumFractionDigits != null) options.minimumFractionDigits = minimumFractionDigits
+  return new Intl.NumberFormat('en-US', options).format(amount)
 }
 
 export function formatCompactCurrency(value, currency = 'USD') {

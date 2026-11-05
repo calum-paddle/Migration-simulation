@@ -105,6 +105,22 @@
   margin-bottom: 0;
 }
 
+.input-group {
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.input-group:last-child {
+  margin-bottom: 0;
+}
+
+.input-group .field:last-child {
+  margin-bottom: 0;
+}
+
 .field-label {
   display: block;
   margin-bottom: 8px;
@@ -132,10 +148,18 @@
 
 .input-with-prefix .prefix,
 .input-with-suffix .suffix {
+  flex-shrink: 0;
   padding: 0 12px;
   color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 400;
+  white-space: nowrap;
+}
+
+.input-with-suffix input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
 }
 
 .currency-select {
@@ -191,6 +215,18 @@
   outline: none;
 }
 
+.field > input[type='number'] {
+  display: block;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.field > input[type='number']:focus {
+  border-color: var(--text);
+}
+
 .field input[type='date'] {
   display: block;
   position: relative;
@@ -208,6 +244,7 @@
 
 .buyer-led-applied {
   margin-top: 0;
+  margin-bottom: 18px;
 }
 
 .field input:focus {
