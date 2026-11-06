@@ -58,7 +58,7 @@
 
 .app-grid {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 400px 1fr;
   gap: 28px;
   align-items: start;
 }
@@ -265,7 +265,7 @@
 .slider-ticks {
   display: flex;
   justify-content: space-between;
-  margin-top: 4px;
+  margin-top: -4px;
   font-size: 0.75rem;
   color: var(--text-muted);
 }
@@ -285,6 +285,11 @@
 
 .plan-card .field:last-child {
   margin-bottom: 0;
+}
+
+.plan-card-collapsed {
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .plan-card-collapsed .plan-card-header {
@@ -325,8 +330,53 @@
 }
 
 .plan-card-collapsed .plan-chevron,
-.fold-collapsed .plan-chevron {
+.fold-collapsed .plan-chevron,
+.optional-block:not(.optional-open) .plan-chevron {
   transform: rotate(-45deg) translate(-1px, 0);
+}
+
+.optional-block {
+  margin-top: 4px;
+}
+
+.optional-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.optional-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.optional-tag {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.optional-value {
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.optional-block .field {
+  margin: 10px 0 0;
 }
 
 .plan-collapsed-label {

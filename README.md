@@ -17,7 +17,7 @@ old(t)    = retained GMV × retention^t
 paddle(t) = GMV − old(t)
 ```
 
-The subscription count is not used for revenue. Migrated subscribers are that count times the share of total GMV that token migrations actually take. Average order value is total GMV divided by the subscription count, rounded to the nearest dollar.
+The subscription count is optional and is not used for revenue. When it is set, migrated subscribers are that count times the share of total GMV that token migrations actually take. Average order value is total GMV divided by the subscription count, rounded to the nearest dollar.
 
 ## Growth
 
@@ -49,5 +49,5 @@ The chart ends in the month the last token's previous-provider revenue falls to 
 
 - **Moves to Paddle** is what the tokens actually take, `share × migratable` of total GMV, added across tokens. It moves on each token's own date.
 - **Stays with the previous provider** is the rest. That is the buyer-led pool, before anyone responds.
-- **Subscribers** are the number entered in General. The migrated count is that number times the share of GMV that moves to Paddle.
+- **Subscribers** appear when a subscription count is entered. The migrated count is that number times the share of GMV that moves to Paddle.
 - **Fully migrated by** is the end of the chart, counted from the first migration date.

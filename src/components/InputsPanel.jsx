@@ -238,6 +238,7 @@ export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
   const { sellerName, currency, gmv, growthPct, subscriptions, plans, migrations, buyerLed } = inputs
   const [openSection, setOpenSection] = useState(null)
   const [openPlanId, setOpenPlanId] = useState(null)
+  const [subscriptionsOpen, setSubscriptionsOpen] = useState(false)
   const totalGmv = Number(gmv) || 0
 
   const setCurrency = (next) => onChange({ ...inputs, currency: next })
@@ -285,10 +286,10 @@ export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
     setOpenSection((current) => (current === id ? null : current))
   }
 
+  const subscriptionCount = Number(subscriptions) || 0
   const generalSummary = [
     sellerName?.trim() || 'General',
     formatCompactCurrency(totalGmv, currency),
-    formatNumber(Number(subscriptions) || 0),
     `${Math.round(Number(growthPct) || 0)}% / year`,
   ].join(' · ')
 
@@ -331,27 +332,50 @@ export default function InputsPanel({ inputs, onChange, buyerLedPool = 0 }) {
             </div>
           </label>
 
-          <label className="field">
-            <span className="field-label">Number of subscriptions</span>
-            <div className="input-with-suffix">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={subscriptions}
-                onChange={(event) => onChange({
-                  ...inputs,
-                  subscriptions: event.target.value === '' ? '' : Number(event.target.value),
-                })}
-                aria-label="Number of subscriptions"
-              />
-              <span className="suffix">
-                {Number(subscriptions) > 0
-                  ? `AOV: ${formatCurrency(Math.round(totalGmv / Number(subscriptions)), { currency })}`
-                  : 'AOV: —'}
+          <div className={`optional-block${subscriptionsOpen ? ' optional-open' : ''}`}>
+            <button
+              type="button"
+              className="optional-toggle"
+              aria-expanded={subscriptionsOpen}
+              onClick={() => setSubscriptionsOpen((open) => !open)}
+            >
+              <span className="plan-chevron" aria-hidden="true" />
+              <span className="optional-label">
+                Number of subscriptions
+                {(subscriptionsOpen || subscriptionCount === 0) && (
+                  <span className="optional-tag">Optional</span>
+                )}
               </span>
+              {!subscriptionsOpen && subscriptionCount > 0 && (
+                <span className="optional-value">{formatNumber(subscriptionCount)}</span>
+              )}
+            </button>
+            <div className={`slide${subscriptionsOpen ? ' slide-open' : ''}`}>
+              <div className="slide-inner" {...(subscriptionsOpen ? {} : { inert: '' })}>
+                <label className="field">
+                  <div className="input-with-suffix">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={subscriptions}
+                      placeholder="eg. 1000"
+                      onChange={(event) => onChange({
+                        ...inputs,
+                        subscriptions: event.target.value === '' ? '' : Number(event.target.value),
+                      })}
+                      aria-label="Number of subscriptions"
+                    />
+                    <span className="suffix">
+                      {subscriptionCount > 0
+                        ? `AOV: ${formatCurrency(Math.round(totalGmv / subscriptionCount), { currency })}`
+                        : 'AOV: —'}
+                    </span>
+                  </div>
+                </label>
+              </div>
             </div>
-          </label>
+          </div>
         </div>
 
         <div className="input-group">

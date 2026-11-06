@@ -10,7 +10,7 @@ const DEFAULT_INPUTS = {
   currency: 'USD',
   gmv: 500000,
   growthPct: 0,
-  subscriptions: 10000,
+  subscriptions: '',
   plans: [{ id: 1, period: 'monthly', customLabel: '', sharePct: 100, lifespanMonths: 24 }],
   migrations: [
     {

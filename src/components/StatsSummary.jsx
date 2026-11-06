@@ -21,10 +21,10 @@ export default function StatsSummary({ result, currency }) {
       label: 'Buyer-led target',
       value: formatCurrency(buyerLedTarget, { currency }),
     }] : []),
-    {
+    ...(totalSubscribers > 0 ? [{
       label: 'Subscribers migrated',
       value: `${formatNumber(migratedSubscribers)} / ${formatNumber(totalSubscribers)}`,
-    },
+    }] : []),
     { label: 'Blended monthly churn', value: formatPercent(monthlyChurnRate) },
     {
       label: 'Fully migrated by',
